@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  redis:
+    image: bitnami/valkey
+    environment:
+      - VALKEY_PASSWORD=password
+    volumes:
+      - valkey:/bitnami/valkey
+
+volumes:
+  valkey: {}
