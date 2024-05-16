@@ -7,6 +7,12 @@ services:
       - VALKEY_PASSWORD=password
     volumes:
       - valkey:/bitnami/valkey
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ./Dockerfile
+    ports:
+      - "3000:3000"
 
 volumes:
   valkey: {}
