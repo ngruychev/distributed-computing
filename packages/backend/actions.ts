@@ -1,5 +1,6 @@
-import { WatchError, type RedisClientType } from "redis"; import { v4 as uuid } from "uuid"; import type { Stats, WorkerHeartbeatResponse } from "./models.ts";
-import { Task } from "./models.ts"; import { WorkerHeartbeat } from "./models.ts"; import { ClaimTaskRequest } from "./models.ts"; import { ClaimedTask } from "./models.ts"; import { CreateTaskRequest } from "./models.ts";
+import { WatchError, type RedisClientType } from "redis"; import { v4 as uuid } from "uuid";
+import type { Stats, WorkerHeartbeatResponse } from "@distributed-computing/types";
+import { Task, WorkerHeartbeat, ClaimTaskRequest, ClaimedTask, CreateTaskRequest } from "@distributed-computing/types";
 
 const HEARTBEAT_EXPIRE_SECONDS = 60;
 
