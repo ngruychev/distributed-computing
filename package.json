@@ -4,6 +4,8 @@
     "packages/*"
   ],
   "scripts": {
+    "start-backend": "npm --workspace @distributed-computing/backend run start",
+    "start-worker": "npm --workspace @distributed-computing/worker run start"
   },
   "version": "1.0.0",
   "private": true

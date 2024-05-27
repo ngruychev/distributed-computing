@@ -9,8 +9,8 @@ services:
       - valkey:/bitnami/valkey
   backend:
     build:
-      context: ./backend
       dockerfile: ./Dockerfile
+      target: app-backend
     ports:
       - "3000:3000"
 
