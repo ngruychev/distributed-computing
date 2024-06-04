@@ -14,4 +14,6 @@ CMD [ "/usr/bin/env", "npm", "run", "start-backend" ]
 
 FROM app-base AS app-worker
 
+COPY wordlists/. .
+
 CMD [ "/usr/bin/env", "npm", "run", "start-worker" ]
