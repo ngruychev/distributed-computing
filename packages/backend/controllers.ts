@@ -1,7 +1,7 @@
 import express from "express";
 import type { RedisClientType } from "redis";
 
-import { addTask, claimTask, getStats, heartbeat } from "./actions.ts";
+import { addTask, claimSubTask, getStats, heartbeat } from "./actions.ts";
 
 interface ApiControllerOptions {
   /**
@@ -24,7 +24,7 @@ export function apiController({ redisClient }: ApiControllerOptions): express.Ro
   router.post("/task/claim", async (req, res) => {
     const claimReq = req.body;
     try {
-      const claimed = await claimTask(claimReq, redisClient);
+      const claimed = await claimSubTask(claimReq, redisClient);
       res.status(200).json(claimed);
     } catch {
       res.status(500).send("Internal Server Error");

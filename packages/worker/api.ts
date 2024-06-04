@@ -1,6 +1,6 @@
-import { type ClaimedTask, type ClaimTaskRequest } from "@distributed-computing/types";
+import { type ClaimedSubTask, type ClaimSubTaskRequest } from "@distributed-computing/types";
 
-export async function tryClaimTask(server: string, { workerId }: ClaimTaskRequest) {
+export async function tryClaimTask(server: string, { workerId }: ClaimSubTaskRequest) {
   try {
     const response = await fetch(`${server}/api/task/claim`, {
       headers: {
@@ -23,6 +23,6 @@ export async function heartbeat(server: string) {
   // TODO implement
 }
 
-export async function getTaskInfo(server: string, task: ClaimedTask) {
+export async function getTaskInfo(server: string, task: ClaimedSubTask) {
   // TODO implement
 }

@@ -18,7 +18,8 @@ npm run start-worker
   - [ ] controllers
     - [ ] proper exception handling and HTTP codes in controllers
   - [x] dockerfiles
+  - [ ] Worker implementation - Evgeni
   - [ ] Kubernetes definitions - Evgeni
   - [ ] User interface - Nadir, Thomas
-  - [ ] Worker implementation - Evgeni
   - [ ] `.dockerignore` file
+  - [ ] SSL on backend & worker somehow
