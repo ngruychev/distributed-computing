@@ -4,6 +4,12 @@ import { Task, WorkerHeartbeat, ClaimSubTaskRequest, ClaimedSubTask, CreateTaskR
 
 const HEARTBEAT_EXPIRE_SECONDS = 60;
 
+const WORDLIST_LENGTHS = {
+  "rockyou.txt": 14344391,
+  "piotrcki-wordlist-top10m.txt": 9872702,
+};
+
+
 /**
  * use with LPUSH, RPOP
  * @kind redis key
@@ -14,7 +20,7 @@ const TASKS_KEY = "tasks";
   * @returns redis key
   */
 // eslint-disable-next-line func-style
-const TASK_KEY = (taskId: string) => `${TASK_KEY}:${taskId}`;
+const TASK_KEY = (taskId: string) => `${TASKS_KEY}:${taskId}`;
 /**
   * use with LPUSH, RPOP
   * @returns redis key
@@ -57,11 +63,27 @@ export const defaultLogger: Logger = {
 };
 
 export async function addTask(req: CreateTaskRequest, client: RedisClientType, logger = defaultLogger): Promise<void> {
-  const { name, subtasks } = CreateTaskRequest.parse(req);
+  const { name, subtaskRangeLen, wordlist, algo, passwordHash: password } = CreateTaskRequest.parse(req);
   const task: Task = {
     id: uuid(),
     name: name,
   };
+  const subtasks = [];
+  logger.log(`Computing subtasks - ${subtaskRangeLen} wordlist lines per subtask`);
+  for (
+    let i = 0;
+    i < WORDLIST_LENGTHS[wordlist];
+    i += subtaskRangeLen
+  ) {
+    subtasks.push({
+      password,
+      algo,
+      wordlist,
+      wordlistRange: [i, subtaskRangeLen - 1],
+    });
+  }
+  logger.log(`Computed ${subtasks.length} subtasks`);
+  logger.log(`Adding subtasks to task ${task.id}`);
   for (const [index, subtask] of subtasks.entries()) {
     await client.multi()
       .set(SUBTASK_KEY(task.id, String(index)), JSON.stringify(subtask))
@@ -167,14 +189,20 @@ export async function heartbeat(beat: WorkerHeartbeat, client: RedisClientType, 
   }
 }
 
+export async function getAllTasks(client: RedisClientType, logger = defaultLogger): Promise<Task[]> {
+  const taskIds = await client.lRange(TASKS_KEY, 0, -1);
+  const tasks = await Promise.all(taskIds.map((taskId) => getTask(taskId, client, logger)));
+  return tasks.filter((task): task is Task => task !== null);
+}
+
 export async function getTask(taskId: string, client: RedisClientType, logger = defaultLogger): Promise<Task | null> {
-  const taskKey = `tasks:${taskId}`;
-  const task = await client.get(taskKey);
+  const task = await client.get(TASK_KEY(taskId));
   if (task === null) {
     return null;
   }
   logger.log(`Getting task ${taskId}`);
-  return Task.parse(task);
+  const taskObj = JSON.parse(task);
+  return Task.parse(taskObj);
 }
 
 export async function getSubTask(taskId: string, subTaskId: string, client: RedisClientType, logger = defaultLogger): Promise<SubTask | null> {
@@ -190,9 +218,28 @@ export async function getSubTask(taskId: string, subTaskId: string, client: Redi
 export async function getStats(client: RedisClientType, logger = defaultLogger): Promise<Stats> {
   logger.log("Getting stats");
   const totalTasks = await client.lLen(TASKS_KEY);
+  const [subtasksQueued, subtasksClaimed] = await client.eval(
+    `
+    local subtasksKeys = redis.call("KEYS", KEYS[1])
+    local subtasksQueued = 0
+    for _, subtaskKey in ipairs(subtasksKeys) do
+      local count = redis.call("LLEN", subtaskKey)
+      subtasksQueued = subtasksQueued + count
+    end
+    local claimedSubtasksKeys = redis.call("KEYS", KEYS[2])
+    local subtasksClaimed = 0
+    for _, claimedSubtaskKey in ipairs(claimedSubtasksKeys) do
+      local count = redis.call("HLEN", claimedSubtaskKey)
+      subtasksClaimed = subtasksClaimed + count
+    end
+    return { subtasksQueued, subtasksClaimed }
+  `, {
+      keys: [SUBTASKS_KEY('*'), CLAIMED_SUBTASKS_KEY('*')]
+    }
+  ) as [number, number] | undefined ?? [0, 0];
+  const totalSubTasks = subtasksQueued + subtasksClaimed;
   return Promise.resolve({
     totalTasks,
-    tasksQueued,
     totalSubTasks,
     subtasksQueued,
     subtasksClaimed,

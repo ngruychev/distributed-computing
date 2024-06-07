@@ -1,7 +1,8 @@
-import express from "express";
+import express, { Response } from "express";
 import type { RedisClientType } from "redis";
 
-import { addTask, claimSubTask, getStats, heartbeat } from "./actions.ts";
+import { addTask, claimSubTask, getAllTasks, getStats, getTask, heartbeat } from "./actions.ts";
+import { ZodError } from "zod";
 
 interface ApiControllerOptions {
   /**
@@ -10,44 +11,65 @@ interface ApiControllerOptions {
   redisClient: RedisClientType;
 }
 
+function handleError(res: Response, e: unknown) {
+  console.error(e);
+  if (e instanceof ZodError) {
+    res.status(400).json(e.errors);
+    return;
+  }
+  res.status(500).send("Internal Server Error");
+}
+
 export function apiController({ redisClient }: ApiControllerOptions): express.Router {
   const router = express.Router();
-  router.post("/task", async (req, res) => {
+  router.post("/task", (req, res) => {
     const task = req.body;
-    try {
-      await addTask(task, redisClient);
-      res.status(200).send("OK");
-    } catch {
-      res.status(500).send("Internal Server Error");
-    }
+    addTask(task, redisClient)
+      .then(() => res.status(200).send("OK"))
+      .catch((e) => handleError(res, e));
   });
-  router.post("/task/claim", async (req, res) => {
+  router.post("/task/claim", (req, res) => {
     const claimReq = req.body;
-    try {
-      const claimed = await claimSubTask(claimReq, redisClient);
-      res.status(200).json(claimed);
-    } catch {
-      res.status(500).send("Internal Server Error");
-    }
+    claimSubTask(claimReq, redisClient)
+      .then((claimed) => res.status(200).json(claimed))
+      .catch((e) => handleError(res, e));
   });
-  router.post("/task/heartbeat", async (req, res) => {
+  router.post("/task/heartbeat", (req, res) => {
     // Figure it out
     const beat = req.body;
-    const resp = await heartbeat(beat, redisClient);
-    if (!resp.success) {
-      res.status(500).send("Internal Server Error");
-      return;
-    }
-    res.status(200).json(resp);
+    heartbeat(beat, redisClient)
+      .then((resp) => {
+        if (!resp.success) {
+          res.status(400).send("Heartbeat failed");
+          return;
+        }
+        res.status(200).json(resp);
+      })
+      .catch((e) => handleError(res, e));
   });
 
-  router.get("/stats", async (_, res) => {
-    try {
-      const stats = await getStats(redisClient);
-      res.status(200).json(stats);
-    } catch {
-      res.status(500).send("Internal Server Error");
-    }
+  router.get("/task", (_, res) => {
+    getAllTasks(redisClient)
+      .then((tasks) => res.status(200).json(tasks))
+      .catch((e) => handleError(res, e));
+  });
+  router.get("/task/:id", (req, res) => {
+    const { id } = req.params;
+    getTask(id, redisClient)
+      .then((task) => {
+        if (task === null) {
+          res.status(404).send("Not Found");
+          return;
+        }
+        res.status(200).json(task);
+      })
+      .catch((e) => handleError(res, e));
+  });
+
+  router.get("/stats", (_, res) => {
+    getStats(redisClient)
+      .then((stats) => res.status(200).json(stats))
+      .catch((e) => handleError(res, e));
   });
 
   return router;

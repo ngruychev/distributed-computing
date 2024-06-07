@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stats | Distributed Computing</title>
+  <script src="https://unpkg.com/petite-vue" defer init></script>
+  <link rel="stylesheet" href="http://mincss.com/entireframework.min.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <nav class="nav" tabindex="-1" onclick="this.focus()">
+    <div class="container">
+      <a href="" class="pagename current">Distributed Computing</a>
+      <a href="/">Home</a>
+      <a href="/createTask.html">Create Task</a>
+      <a href="#" class="current">Stats</a>
+      <a href="/taskList.html">Tasks</a>
+    </div>
+  </nav>
+  <main class="container" v-scope="Stats()" @vue:mounted="refresh()">
+    <button class="btn btn-sm btn-a" @click="refresh()">Refresh</button>
+    <br>
+    <span class="msg msg-error" v-if="error">{{ errorText }}</span>
+    <span class="msg" v-if="loading">Loading...</span>
+    <dl v-if="!error && !loading">
+      <dt>Total tasks</dt>
+      <dd>{{ stats.totalTasks }}</dd>
+      <dt>Subtasks queued</dt>
+      <dd>{{ stats.subtasksQueued }}</dd>
+      <dt>Subtasks claimed</dt>
+      <dd>{{ stats.subtasksClaimed }}</dd>
+      <dt>Total subtasks</dt>
+      <dd>{{ stats.totalSubTasks }}</dd>
+    </dl>
+  </main>
+  <script>
+    const API_URL = "/api";
+    function Stats() {
+      return {
+        stats: {
+          totalTasks: 0,
+          subtasksQueued: 0,
+          subtasksClaimed: 0,
+          totalSubTasks: 0,
+        },
+        loading: false,
+        error: false,
+        errorText: "",
+        refresh() {
+          this.loading = true;
+          fetch(`${API_URL}/stats`)
+            .then(async (resp) => {
+              this.loading = false;
+              if (!resp.ok) {
+                this.error = true;
+                this.errorText = await resp.text();
+                return;
+              }
+              const stats = await resp.json();
+              this.stats.totalTasks = stats.totalTasks;
+              this.stats.subtasksQueued = stats.subtasksQueued;
+              this.stats.subtasksClaimed = stats.subtasksClaimed;
+              this.stats.totalSubTasks = stats.totalSubTasks;
+            })
+            .catch((err) => {
+              this.loading = false;
+              this.error = true;
+              this.errorText = err instanceof Error ? err.message : "Unknown error";
+            });
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

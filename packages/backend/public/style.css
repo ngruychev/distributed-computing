@@ -1,0 +1,8 @@
+.msg {
+  display: inline-block;
+}
+
+.msg--error {
+  border-color: #e44;
+  background-color: #fdd;
+}

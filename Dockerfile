@@ -1,10 +1,14 @@
+# syntax=docker/dockerfile:1.7-labs
+
 FROM node:20-bookworm-slim AS app-base
 
 WORKDIR /app
 COPY ./package-lock.json .
 COPY ./package.json .
+COPY --parents ./packages/**/package.json .
 RUN npm ci
-COPY . .
+COPY ./tsconfig.json .
+COPY ./packages ./packages/
 
 USER node
 

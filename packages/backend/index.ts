@@ -4,10 +4,17 @@ import { createClient } from "redis";
 
 import { apiController } from "./controllers.ts";
 
+const { REDIS_PASSWORD } = process.env;
+
 const app = express();
 app.use(express.json());
 
-const redisClient = createClient();
+const redisClient = createClient({
+  url: "redis://redis:6379",
+  password: REDIS_PASSWORD,
+});
+
+await redisClient.connect();
 
 app.use("/api", apiController({ redisClient: redisClient as RedisClientType }));
 

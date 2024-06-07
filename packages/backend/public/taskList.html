@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Task List | Distributed Computing</title>
+  <script src="https://unpkg.com/petite-vue" defer init></script>
+  <link rel="stylesheet" href="http://mincss.com/entireframework.min.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <nav class="nav" tabindex="-1" onclick="this.focus()">
+    <div class="container">
+      <a href="" class="pagename current">Distributed Computing</a>
+      <a href="/">Home</a>
+      <a href="/createTask.html">Create Task</a>
+      <a href="/stats.html">Stats</a>
+      <a href="#" class="current">Tasks</a>
+    </div>
+  </nav>
+  <main class="container" v-scope="Stats()" @vue:mounted="refresh()">
+    <h1>Tasks</h1>
+    <button class="btn btn-sm btn-a" @click="refresh()">Refresh</button>
+    <br>
+    <span class="msg msg-error" v-if="error">{{ errorText }}</span>
+    <span class="msg" v-if="loading">Loading...</span>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Id</th>
+          <th>Name</th>
+        </tr>
+      </thead>
+      <tbody v-if="tasks.length > 0">
+        <tr v-for="task in tasks">
+          <td>{{ task.id }}</td>
+          <td>{{ task.name }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </main>
+  <script>
+    const API_URL = "/api";
+    function Stats() {
+      return {
+        tasks: [],
+        loading: false,
+        error: false,
+        errorText: "",
+        refresh() {
+          this.loading = true;
+          fetch(`${API_URL}/task`)
+            .then(async (resp) => {
+              this.loading = false;
+              if (!resp.ok) {
+                this.error = true;
+                this.errorText = await resp.text();
+                return;
+              }
+              const tasks = await resp.json();
+              this.tasks = tasks;
+            })
+            .catch((err) => {
+              this.loading = false;
+              this.error = true;
+              this.errorText = err instanceof Error ? err.message : "Unknown error";
+            });
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create task | Distributed Computing</title>
+  <script src="https://unpkg.com/petite-vue" defer init></script>
+  <link rel="stylesheet" href="http://mincss.com/entireframework.min.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <nav class="nav" tabindex="-1" onclick="this.focus()">
+    <div class="container">
+      <a href="" class="pagename current">Distributed Computing</a>
+      <a href="/">Home</a>
+      <a href="#" class="current">Create Task</a>
+      <a href="/stats.html">Stats</a>
+      <a href="/taskList.html">Tasks</a>
+    </div>
+  </nav>
+  <h1>Create new task</h1>
+  <form v-scope="Form()" @submit.prevent="submit">
+    <fieldset>
+      <span v-if="error" class="msg msg--error">{{ errorText }}</span>
+      <br />
+      <label for="name">
+        Name:
+        <input type="text" required id="name" name="name" v-model="data.name" />
+      </label>
+      <br />
+      <label for="passwordHash">
+        Password Hash:
+        <input type="text" required id="passwordHash" name="passwordHash" v-model="data.passwordHash" />
+      </label>
+      <br />
+      <label for="algo">
+        Algorithm:
+        <select name="algo" id="algo" v-model="data.algo" required>
+          <option value="SHA256">SHA256</option>
+          <option value="SHA512">SHA512</option>
+          <option value="MD5">MD5</option>
+        </select>
+      </label>
+      <br />
+      <label for="wordlist">
+        Wordlist:
+        <select name="wordlist" id="wordlist" v-model="data.wordlist" required>
+          <option value="rockyou.txt">rockyou.txt</option>
+          <option value="piotrcki-wordlist-top10m.txt">
+            piotrcki-wordlist-top10m.txt
+          </option>
+        </select>
+      </label>
+      <br />
+      <label for="subtaskRange">
+        Passwords per subtask:
+        <input type="number" id="subtaskRange" name="subtaskRange" v-model="data.subtaskRangeLen" min="5" max="10000"
+          required />
+      </label>
+      <br />
+      <button type="submit" class="btn btn-sm btn-a" :disabled="submitting">
+        {{ buttonText }}
+      </button>
+    </fieldset>
+  </form>
+  <script>
+    const API_URL = "/api";
+
+    function Form() {
+      return {
+        data: {
+          name: "",
+          passwordHash: "",
+          algo: "SHA256",
+          wordlist: "rockyou.txt",
+          subtaskRangeLen: 100,
+        },
+        submitting: false,
+        buttonText: "Submit",
+        error: false,
+        errorText: "",
+        submit() {
+          this.buttonText = "Submitting...";
+          this.loading = true;
+          const {wordlist, name, passwordHash, algo, subtaskRangeLen} =
+            this.data;
+
+          fetch(`${API_URL}/task`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name,
+              algo,
+              wordlist,
+              passwordHash,
+              subtaskRangeLen,
+            }),
+          })
+            .catch((err) => {
+              this.error = true;
+              this.errorText = err instanceof Error ? err.message : "Unknown error";
+            })
+            .then(async (resp) => {
+              if (!resp.ok) {
+                this.error = true;
+                this.errorText = resp.text();
+                return;
+              }
+              this.error = false;
+              this.errorText = "";
+              this.submitting = false;
+              this.buttonText = "Submit";
+            });
+        },
+      };
+    }
+  </script>
+</body>
+
+</html>

@@ -7,10 +7,14 @@ services:
       - VALKEY_PASSWORD=password
     volumes:
       - valkey:/bitnami/valkey
+    ports:
+      - "6379:6379"
   backend:
     build:
       dockerfile: ./Dockerfile
       target: app-backend
+    environment:
+      - REDIS_PASSWORD=password
     ports:
       - "3000:3000"
 
