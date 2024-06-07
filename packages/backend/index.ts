@@ -4,13 +4,13 @@ import { createClient } from "redis";
 
 import { apiController } from "./controllers.ts";
 
-const { REDIS_PASSWORD } = process.env;
+const { REDIS_HOST, REDIS_PORT, REDIS_PASSWORD } = process.env;
 
 const app = express();
 app.use(express.json());
 
 const redisClient = createClient({
-  url: "redis://redis:6379",
+  url: `redis://${REDIS_HOST ?? "redis"}:${REDIS_PORT ?? "6379"}`,
   password: REDIS_PASSWORD,
 });
 
