@@ -18,11 +18,6 @@ await redisClient.connect();
 
 app.use("/api", apiController({ redisClient: redisClient as RedisClientType }));
 
-app.get("/test", (_, res) => {
-  res.status(200).send({ status: "OK" });
-});
-
-// expose the "public" directory files and folders under the root path, e.g "/index.html" -> "/public/index.html"
 app.use(express.static("public"));
 
 app.listen(3000, () => {

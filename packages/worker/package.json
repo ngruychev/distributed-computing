@@ -7,9 +7,13 @@
     "start": "tsx index.ts"
   },
   "devDependencies": {
+    "@distributed-computing/types": "1.0.0",
+    "@types/uuid": "^9.0.8",
     "tsx": "^4.10.4",
     "typescript": "^5.4.5",
-    "typescript-eslint": "^7.9.0",
-    "@distributed-computing/types": "1.0.0"
+    "typescript-eslint": "^7.9.0"
+  },
+  "dependencies": {
+    "uuid": "^10.0.0"
   }
 }

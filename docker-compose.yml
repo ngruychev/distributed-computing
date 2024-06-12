@@ -17,6 +17,10 @@ services:
       - REDIS_PASSWORD=password
     ports:
       - "3000:3000"
+  worker1:
+    build:
+      dockerfile: ./Dockerfile
+      target: app-worker
 
 volumes:
   valkey: {}

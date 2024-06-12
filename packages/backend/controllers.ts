@@ -1,7 +1,8 @@
-import express, { Response } from "express";
+import type { Response } from "express";
+import express from "express";
 import type { RedisClientType } from "redis";
 
-import { addTask, claimSubTask, getAllTasks, getStats, getTask, heartbeat } from "./actions.ts";
+import { addTask, claimSubTask, getAllTasks, getStats, getSubTask, getTask, heartbeat } from "./actions.ts";
 import { ZodError } from "zod";
 
 interface ApiControllerOptions {
@@ -62,6 +63,18 @@ export function apiController({ redisClient }: ApiControllerOptions): express.Ro
           return;
         }
         res.status(200).json(task);
+      })
+      .catch((e) => handleError(res, e));
+  });
+  router.get("/task/:id/subtask/:idx", (req, res) => {
+    const { id, idx } = req.params;
+    getSubTask(id, idx, redisClient)
+      .then((subtask) => {
+        if (subtask === null) {
+          res.status(404).send("Not Found");
+          return;
+        }
+        res.status(200).json(subtask);
       })
       .catch((e) => handleError(res, e));
   });
