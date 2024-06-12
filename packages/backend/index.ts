@@ -16,6 +16,12 @@ const redisClient = createClient({
 
 await redisClient.connect();
 
+// logger
+app.use((req, _, next) => {
+  console.log(new Date(), req.method, req.url);
+  next();
+});
+
 app.use("/api", apiController({ redisClient: redisClient as RedisClientType }));
 
 app.use(express.static("public"));

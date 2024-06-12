@@ -53,7 +53,7 @@ export type WorkerHeartbeatResponse = z.infer<typeof WorkerHeartbeatResponse>;
 
 export const ClaimedSubTask = z.object({
   taskId: z.string().uuid(),
-  subTaskId: z.string().uuid(),
+  subTaskId: z.string(),
   heartbeat: WorkerHeartbeatResponse,
 });
 export type ClaimedSubTask = z.infer<typeof ClaimedSubTask>;

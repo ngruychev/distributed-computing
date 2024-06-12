@@ -22,14 +22,23 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const QUEUE_SERVER = "http://backend:3000/";
+const QUEUE_SERVER = "http://backend:3000";
 
 const workerId = uuid();
 
+// eslint-disable-next-line no-constant-condition
 while (true) {
   try {
-    const [task] = await getAllTasks(QUEUE_SERVER);
+    console.log(new Date(), "Getting all tasks");
+    const tasks = await getAllTasks(QUEUE_SERVER);
+    const [task] = tasks;
+    console.log(new Date(), "Got tasks", tasks.length, task);
+    if (tasks.length === 0) {
+      await sleep(HEARTBEAT_UPDATE_INTERVAL);
+      continue;
+    }
     console.log(new Date(), `Got task ${task.id}`);
+    console.log(new Date(), "Claiming subtask", task.id);
     const subtask = await tryClaimSubTask(QUEUE_SERVER, {
       workerId,
       taskId: task.id,

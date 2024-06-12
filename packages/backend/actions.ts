@@ -68,7 +68,7 @@ export async function addTask(req: CreateTaskRequest, client: RedisClientType, l
     id: uuid(),
     name: name,
   };
-  const subtasks = [];
+  const subtasks: SubTask[] = [];
   logger.log(`Computing subtasks - ${subtaskRangeLen} wordlist lines per subtask`);
   for (
     let i = 0;
@@ -79,7 +79,7 @@ export async function addTask(req: CreateTaskRequest, client: RedisClientType, l
       password,
       algo,
       wordlist,
-      wordlistRange: [i, subtaskRangeLen - 1],
+      wordlistLineRange: [i, subtaskRangeLen - 1],
     });
   }
   logger.log(`Computed ${subtasks.length} subtasks`);
@@ -118,22 +118,29 @@ export async function claimSubTask(req: ClaimSubTaskRequest, client: RedisClient
   }
   let subTaskId = null;
   try {
-    await client.executeIsolated(async (isolatedClient) => {
-      await isolatedClient.watch(SUBTASKS_KEY(taskId));
-      await isolatedClient.watch(CLAIMED_SUBTASKS_KEY(taskId));
+    // await client.executeIsolated(async (isolatedClient) => {
+    //   await isolatedClient.watch(SUBTASKS_KEY(taskId));
+    //   await isolatedClient.watch(CLAIMED_SUBTASKS_KEY(taskId));
 
-      const multi = isolatedClient.multi()
-        .ping();
-      subTaskId = await isolatedClient.rPop(SUBTASKS_KEY(taskId));
-      if (subTaskId === null) {
-        return multi.discard();
-      }
-      multi.hSet(CLAIMED_SUBTASKS_KEY(taskId), subTaskId, workerId);
-      const result = await multi.exec();
-      if (result === null) {
-        return multi.discard();
-      }
-    });
+    //   const multi = isolatedClient.multi()
+    //     .ping();
+    //   subTaskId = await isolatedClient.rPop(SUBTASKS_KEY(taskId));
+    //   if (subTaskId === null) {
+    //     return multi.discard();
+    //   }
+    //   multi.hSet(CLAIMED_SUBTASKS_KEY(taskId), subTaskId, workerId);
+    //   const result = await multi.exec();
+    //   if (result === null) {
+    //     return multi.discard();
+    //   }
+    // });
+    const subTask = await client.rPop(SUBTASKS_KEY(taskId));
+    if (subTask === null) {
+      logger.warn(`No more subtasks left for task ${taskId}`);
+      return null;
+    }
+    subTaskId = subTask;
+    await client.hSet(CLAIMED_SUBTASKS_KEY(taskId), subTaskId, workerId);
   } catch (error) {
     if (error instanceof WatchError) {
       logger.error(`Could not get task for worker ${workerId}, unexpected watch error ${error.message}`);
@@ -212,7 +219,8 @@ export async function getSubTask(taskId: string, subTaskId: string, client: Redi
     return null;
   }
   logger.log(`Getting subtask ${subTaskId} from task ${taskId}`);
-  return SubTask.parse(subTask);
+  const obj = JSON.parse(subTask);
+  return SubTask.parse(obj);
 }
 
 export async function getStats(client: RedisClientType, logger = defaultLogger): Promise<Stats> {
@@ -234,8 +242,8 @@ export async function getStats(client: RedisClientType, logger = defaultLogger):
     end
     return { subtasksQueued, subtasksClaimed }
   `, {
-      keys: [SUBTASKS_KEY('*'), CLAIMED_SUBTASKS_KEY('*')]
-    }
+      keys: [SUBTASKS_KEY("*"), CLAIMED_SUBTASKS_KEY("*")],
+    },
   ) as [number, number] | undefined ?? [0, 0];
   const totalSubTasks = subtasksQueued + subtasksClaimed;
   return Promise.resolve({

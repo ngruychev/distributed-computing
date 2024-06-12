@@ -10,7 +10,7 @@ export async function tryClaimSubTask(server: string, { taskId, workerId }: Clai
     body: JSON.stringify({
       workerId,
       taskId,
-    }),
+    } satisfies ClaimSubTaskRequest),
   })
     .catch((err) => {
       console.error("error while claiming task", err);
