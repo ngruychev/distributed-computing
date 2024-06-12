@@ -220,6 +220,7 @@ export async function getSubTask(taskId: string, subTaskId: string, client: Redi
   }
   logger.log(`Getting subtask ${subTaskId} from task ${taskId}`);
   const obj = JSON.parse(subTask);
+  logger.log(`Task is ${subTask}`)
   return SubTask.parse(obj);
 }
 

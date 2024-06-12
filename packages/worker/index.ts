@@ -63,7 +63,7 @@ while (true) {
     }
     // TODO compute
     const rli = createReadlineInterface(
-      createReadStream(join(__dirname, "wordlists/", wordlist)),
+      createReadStream(join(import.meta.dirname, "./../", "./../", "./wordlists/", wordlist)),
     );
     let lineNum = 0;
     let lastHeartBeatTime = Date.now();
