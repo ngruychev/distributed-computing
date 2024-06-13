@@ -1,5 +1,6 @@
 import { WatchError, type RedisClientType } from "redis"; import { v4 as uuid } from "uuid";
 import type { Stats, WorkerHeartbeatResponse } from "@distributed-computing/types";
+import { Answer } from "@distributed-computing/types";
 import { Task, WorkerHeartbeat, ClaimSubTaskRequest, ClaimedSubTask, CreateTaskRequest, SubTask } from "@distributed-computing/types";
 
 const HEARTBEAT_EXPIRE_SECONDS = 60;
@@ -7,7 +8,9 @@ const HEARTBEAT_EXPIRE_SECONDS = 60;
 const WORDLIST_LENGTHS = {
   "rockyou.txt": 14344391,
   "piotrcki-wordlist-top10m.txt": 9872702,
-};
+  "ezpz.txt": 1000,
+
+} satisfies Record<SubTask["wordlist"], number>;
 
 
 /**
@@ -44,6 +47,7 @@ const CLAIMED_SUBTASKS_KEY = (taskId: string) => `${TASK_KEY(taskId)}:claimed_su
   * use with SET, GET, EXPIRE (or SET with EX)
   * @returns redis key
   */
+
 //eslint-disable-next-line func-style
 const HEARTBEAT_KEY = (taskId: string, subtaskIndex: string) => `heartbeat:${taskId}:${subtaskIndex}`;
 
@@ -79,7 +83,7 @@ export async function addTask(req: CreateTaskRequest, client: RedisClientType, l
       password,
       algo,
       wordlist,
-      wordlistLineRange: [i, subtaskRangeLen - 1],
+      wordlistLineRange: [i, i + subtaskRangeLen - 1],
     });
   }
   logger.log(`Computed ${subtasks.length} subtasks`);
@@ -220,8 +224,23 @@ export async function getSubTask(taskId: string, subTaskId: string, client: Redi
   }
   logger.log(`Getting subtask ${subTaskId} from task ${taskId}`);
   const obj = JSON.parse(subTask);
-  logger.log(`Task is ${subTask}`)
+  logger.log(`Task is ${subTask}`);
   return SubTask.parse(obj);
+}
+
+
+//entirely wrong, need to get the subtask by retrieving the task and then getting the taskId
+export async function sendAnswer(answer: Answer, client: RedisClientType, logger = defaultLogger): Promise<Answer | null> {
+  const { subTaskId, answerId, description } = Answer.parse(answer);
+  const subTaskKey = SUBTASK_KEY(answerId, subTaskId);
+  const subTask = await client.get(subTaskKey);
+  if (subTask === null) {
+    return null;
+  }
+  logger.log(`Storing answer for subtask ${subTaskId}`);
+  const updatedSubTask = { ...JSON.parse(subTask), description };
+  await client.set(subTaskKey, JSON.stringify(updatedSubTask));
+  return updatedSubTask;
 }
 
 export async function getStats(client: RedisClientType, logger = defaultLogger): Promise<Stats> {

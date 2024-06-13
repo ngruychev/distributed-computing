@@ -4,7 +4,7 @@ import z from "zod";
 export const SubTask = z.object({
   password: z.string().min(1).max(120),
   algo: z.enum(["SHA256", "SHA512", "MD5"]),
-  wordlist: z.enum(["piotrcki-wordlist-top10m.txt", "rockyou.txt"]),
+  wordlist: z.enum(["piotrcki-wordlist-top10m.txt", "rockyou.txt", "ezpz.txt"]),
   /**
      * This being a tuple of lines of the wordlist to consider, e.g. [1, 17] searches only through lines from 1 to 17 of an e.g. 10k line file
      * Line 1 being the first line.
@@ -16,7 +16,7 @@ export type SubTask = z.infer<typeof SubTask>;
 export const CreateTaskRequest = z.object({
   name: z.string().min(1).max(30),
   algo: z.enum(["SHA256", "SHA512", "MD5"]),
-  wordlist: z.enum(["piotrcki-wordlist-top10m.txt", "rockyou.txt"]),
+  wordlist: z.enum(["piotrcki-wordlist-top10m.txt", "rockyou.txt", "ezpz.txt"]),
   passwordHash: z.string().min(1).max(120),
   // subtasks: z.array(SubTask),
   subtaskRangeLen: z.number().gt(5).lt(10_000),
@@ -71,3 +71,11 @@ export const Stats = z.object({
   totalSubTasks: z.number(),
 });
 export type Stats = z.infer<typeof Stats>;
+
+
+export const Answer = z.object({
+  subTaskId: z.string().uuid(),
+  answerId: z.string().uuid(),
+  description: z.string().min(1),
+});
+export type Answer = z.infer<typeof Answer>;

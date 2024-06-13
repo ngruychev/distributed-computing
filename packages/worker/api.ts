@@ -1,4 +1,4 @@
-import type { ClaimedSubTask, SubTask, Task, WorkerHeartbeat, WorkerHeartbeatResponse } from "@distributed-computing/types";
+import type { Answer, ClaimedSubTask, SubTask, Task, WorkerHeartbeat, WorkerHeartbeatResponse } from "@distributed-computing/types";
 import { type ClaimSubTaskRequest } from "@distributed-computing/types";
 
 export async function tryClaimSubTask(server: string, { taskId, workerId }: ClaimSubTaskRequest): Promise<ClaimedSubTask> {
@@ -87,6 +87,27 @@ export function getAllTasks(server: string): Promise<Task[]> {
   return fetch(`${server}/api/task`)
     .catch((err) => {
       console.error("error while getting all tasks", err);
+      return Promise.reject(err);
+    })
+    .then(async (resp) => {
+      if (!resp.ok) {
+        throw new Error(`request failed with status ${resp.status}`);
+      }
+      return resp.json();
+    });
+}
+
+//needs testing
+export async function sendAnswer(server: string, answer: Answer): Promise<Answer>{
+  return fetch(`${server}/api/task/answer`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(answer),
+  })
+    .catch((err) => {
+      console.error("error while sending answer", err);
       return Promise.reject(err);
     })
     .then(async (resp) => {

@@ -2,7 +2,7 @@ import type { Response } from "express";
 import express from "express";
 import type { RedisClientType } from "redis";
 
-import { addTask, claimSubTask, getAllTasks, getStats, getSubTask, getTask, heartbeat } from "./actions.ts";
+import { addTask, claimSubTask, getAllTasks, getStats, getSubTask, getTask, heartbeat, sendAnswer } from "./actions.ts";
 import { ZodError } from "zod";
 
 interface ApiControllerOptions {
@@ -32,7 +32,10 @@ export function apiController({ redisClient }: ApiControllerOptions): express.Ro
   router.post("/task/claim", (req, res) => {
     const claimReq = req.body;
     claimSubTask(claimReq, redisClient)
-      .then((claimed) => res.status(200).json(claimed))
+      .then((claimed) => {
+        console.log(new Date(), "Claimed subtask", JSON.stringify(claimed));
+        res.status(200).json(claimed);
+      })
       .catch((e) => handleError(res, e));
   });
   router.post("/task/heartbeat", (req, res) => {
@@ -54,6 +57,16 @@ export function apiController({ redisClient }: ApiControllerOptions): express.Ro
       .then((tasks) => res.status(200).json(tasks))
       .catch((e) => handleError(res, e));
   });
+
+  //still needs testing
+  router.post("/task/answer", (req, res) => {
+    const answer = req.body;
+    sendAnswer(answer, redisClient)
+      .then((answer) => res.status(200).json(answer))
+      .catch((e) => handleError(res, e));
+  });
+
+
   router.get("/task/:id", (req, res) => {
     const { id } = req.params;
     getTask(id, redisClient)

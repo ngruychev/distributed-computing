@@ -11,7 +11,9 @@ import {
   getTaskInfo,
   getAllTasks,
   getSubTaskInfo,
+  sendAnswer,
 } from "./api.ts";
+import type { Answer } from "@distributed-computing/types";
 import { SubTask } from "@distributed-computing/types";
 
 const WORDLISTS = SubTask.shape.wordlist.options;
@@ -91,6 +93,7 @@ while (true) {
         return;
       }
       const hash = createHash(algo).update(line).digest("hex");
+      console.log(new Date(), "Checking", JSON.stringify(line), hash, password);
       if (hash === password) {
         clearInterval(interval);
         console.log(new Date(), "Found password", line);
@@ -107,6 +110,14 @@ while (true) {
       }),
     );
     console.log(new Date(), "Sending answer", answer);
+    if (answer) {
+      const answerPayload: Answer = {
+        subTaskId: subtask.subTaskId,
+        answerId: uuid(),
+        description: answer,
+      };
+      await sendAnswer(QUEUE_SERVER, answerPayload);
+    }
     // TODO send answer and implement sendAnswer
     // await sendAnswer(QUEUE_SERVER, task.id, subtask.subTaskId, answer);
     await sleep(HEARTBEAT_UPDATE_INTERVAL);
