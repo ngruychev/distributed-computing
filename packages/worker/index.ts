@@ -24,7 +24,8 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const QUEUE_SERVER = "http://backend:3000";
+const { BACKEND_HOST, BACKEND_PORT } = process.env;
+const QUEUE_SERVER = `http://${BACKEND_HOST ?? 'backend'}:${BACKEND_PORT ?? '3000'}`;
 
 const workerId = uuid();
 
