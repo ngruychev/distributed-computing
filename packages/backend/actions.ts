@@ -212,6 +212,20 @@ export async function heartbeat(beat: WorkerHeartbeat, client: RedisClientType, 
   }
 }
 
+export async function cleanupExpiredHeartbeats(client: RedisClientType, logger = defaultLogger): Promise<void> {
+  // todo proofread
+  const taskKeys = await client.keys(`heartbeat:*`);
+  const heartbeats = await Promise.all(taskKeys.map((key) => client.get(key)));
+  const expired = heartbeats.filter((nonce) => nonce === null);
+  if (expired.length === 0) {
+    logger.log("No expired heartbeats found");
+    return;
+  }
+  logger.log(`Cleaning up ${expired.length} expired heartbeats`);
+  await Promise.all(expired.map((nonce) => client.del(nonce)));
+  logger.log("Cleaned up expired heartbeats");
+}
+
 export async function getAllTasks(client: RedisClientType, logger = defaultLogger): Promise<Task[]> {
   const taskIds = await client.lRange(TASKS_KEY, 0, -1);
   const solvedTaskIds = await client.sMembers(SOLVED_TASKS_KEY);

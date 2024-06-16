@@ -24,38 +24,45 @@ function sleep(ms: number) {
 }
 
 const { BACKEND_HOST, BACKEND_PORT } = process.env;
-const QUEUE_SERVER = `http://${BACKEND_HOST ?? 'backend'}:${BACKEND_PORT ?? '3000'}`;
+const QUEUE_SERVER = `http://${BACKEND_HOST ?? "backend"}:${BACKEND_PORT ?? "3000"}`;
 
 const workerId = uuid();
 
-async function compute({ wordlistLineRange, algo, password, wordlist }: SubTask): Promise<string | null> {
-    const rli = createReadlineInterface(
-      createReadStream(join(import.meta.dirname, "./../", "./../", "./wordlists/", wordlist)),
-    );
-    let lineNum = 0;
-    let answer: string | null = null;
+async function compute({
+  wordlistLineRange,
+  algo,
+  password,
+  wordlist,
+}: SubTask): Promise<string | null> {
+  const rli = createReadlineInterface(
+    createReadStream(
+      join(import.meta.dirname, "./../", "./../", "./wordlists/", wordlist),
+    ),
+  );
+  let lineNum = 0;
+  let answer: string | null = null;
 
-    rli.on("line", async (line) => {
-      const currentLineNum = lineNum++;
-      const [start, end] = wordlistLineRange;
-      if (currentLineNum < start || currentLineNum > end) {
-        return;
-      }
-      const hash = createHash(algo).update(line).digest("hex");
-      console.log(new Date(), "Checking", JSON.stringify(line), hash, password);
-      if (hash === password) {
-        console.log(new Date(), "Found password", line);
-        answer = line;
-        rli.close();
-      }
-    });
+  rli.on("line", async (line) => {
+    const currentLineNum = lineNum++;
+    const [start, end] = wordlistLineRange;
+    if (currentLineNum < start || currentLineNum > end) {
+      return;
+    }
+    const hash = createHash(algo).update(line).digest("hex");
+    console.log(new Date(), "Checking", JSON.stringify(line), hash, password);
+    if (hash === password) {
+      console.log(new Date(), "Found password", line);
+      answer = line;
+      rli.close();
+    }
+  });
 
-    return await new Promise((resolve) =>
-      rli.on("close", async () => {
-        console.log(new Date(), "Subtask done");
-        resolve(answer);
-      }),
-    );
+  return await new Promise((resolve) =>
+    rli.on("close", async () => {
+      console.log(new Date(), "Subtask done");
+      resolve(answer);
+    }),
+  );
 }
 
 async function main() {
@@ -72,12 +79,17 @@ async function main() {
         continue;
       }
       console.log(new Date(), `Got task ${task.id}`);
-      console.log(new Date(), "Claiming subtask", task.id);
+      console.log(new Date(), "Claiming subtask of", task.id);
       if (!claimedSubtask) {
         const subtask = await tryClaimSubTask(QUEUE_SERVER, {
           workerId,
           taskId: task.id,
         });
+        if (!subtask) {
+          throw new Error(
+            "failed to claim subtask, got null (no subtasks available)",
+          );
+        }
         if (subtask.heartbeat.success !== true) {
           throw new Error(
             "failed to claim subtask, somehow got failed heartbeat on claim",
@@ -85,6 +97,7 @@ async function main() {
           );
         }
         claimedSubtask = subtask;
+        console.log(new Date(), "Claimed subtask", claimedSubtask);
       } else {
         // Nothing to do
       }
@@ -100,8 +113,14 @@ async function main() {
       if (!ALGOS.includes(algo)) {
         throw new Error("invalid algo", { cause: algo });
       }
-      if (wordlistLineRange[0] < 0 || wordlistLineRange[1] < 0 || wordlistLineRange[0] > wordlistLineRange[1]) {
-        throw new Error("invalid wordlistLineRange", { cause: wordlistLineRange });
+      if (
+        wordlistLineRange[0] < 0 ||
+        wordlistLineRange[1] < 0 ||
+        wordlistLineRange[0] > wordlistLineRange[1]
+      ) {
+        throw new Error("invalid wordlistLineRange", {
+          cause: wordlistLineRange,
+        });
       }
       let lastHeartBeatTime = Date.now();
       if (!claimedSubtask.heartbeat.success) {
@@ -109,21 +128,39 @@ async function main() {
       }
       let lastHeartBeatNonce = claimedSubtask.heartbeat.nextHeartBeatNonce;
       //
+      const intervalStatus = {
+        // promise: new Promise((resolve, reject) => {
+        //   intervalStatus.reject = reject;
+        //   intervalStatus.resolve = resolve;
+        // }),
+        promise: null as Promise<unknown> | null,
+        reject: null as ((reason?: any) => void) | null,
+        resolve: null as ((value?: unknown) => void) | null,
+      };
+      intervalStatus.promise = new Promise((resolve, reject) => {
+        intervalStatus.reject = reject;
+        intervalStatus.resolve = resolve;
+      });
       const interval = setInterval(async () => {
-        if (Date.now() - lastHeartBeatTime > HEARTBEAT_UPDATE_INTERVAL) {
-          const res = await heartbeat(QUEUE_SERVER, {
-            taskId: task.id,
-            subTaskId: claimedSubtask!.subTaskId,
-            workerId,
-            nonce: lastHeartBeatNonce,
-          });
-          if (res.success !== true) {
-            clearInterval(interval);
-            claimedSubtask = null;
-            throw new Error("failed to send heartbeat", { cause: res });
+        try {
+          if (Date.now() - lastHeartBeatTime > HEARTBEAT_UPDATE_INTERVAL) {
+            const res = await heartbeat(QUEUE_SERVER, {
+              taskId: task.id,
+              subTaskId: claimedSubtask!.subTaskId,
+              workerId,
+              nonce: lastHeartBeatNonce,
+            }).catch((_err) => null);
+            if (!res || res.success !== true) {
+              clearInterval(interval);
+              claimedSubtask = null;
+              throw new Error("failed to send heartbeat", { cause: res });
+            }
+            lastHeartBeatNonce = res.nextHeartBeatNonce;
+            lastHeartBeatTime = Date.now();
+            intervalStatus.resolve?.();
           }
-          lastHeartBeatNonce = res.nextHeartBeatNonce;
-          lastHeartBeatTime = Date.now();
+        } catch (error) {
+          intervalStatus.reject?.(error);
         }
       }, HEARTBEAT_UPDATE_INTERVAL);
       const answer = await compute(subtaskInfo);
@@ -138,6 +175,13 @@ async function main() {
           answerString: answer,
         };
         await sendAnswer(QUEUE_SERVER, answerPayload);
+      }
+      try {
+        await intervalStatus.promise;
+      } catch (error) {
+        clearInterval(interval);
+        claimedSubtask = null;
+        throw error;
       }
       await sleep(HEARTBEAT_UPDATE_INTERVAL);
     } catch (error) {
