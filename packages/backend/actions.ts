@@ -1,9 +1,9 @@
 import { WatchError, type RedisClientType } from "redis"; import { v4 as uuid } from "uuid";
-import type { Stats, WorkerHeartbeatResponse } from "@distributed-computing/types";
+import { Stats, WorkerHeartbeatResponse, WorkerRegistration } from "@distributed-computing/types";
 import { Answer } from "@distributed-computing/types";
 import { Task, WorkerHeartbeat, ClaimSubTaskRequest, ClaimedSubTask, CreateTaskRequest, SubTask } from "@distributed-computing/types";
 
-const HEARTBEAT_EXPIRE_SECONDS = 60;
+const HEARTBEAT_EXPIRE_SECONDS = 120;
 
 const WORDLIST_LENGTHS = {
   "rockyou.txt": 14344391,
@@ -48,8 +48,16 @@ const CLAIMED_SUBTASKS_KEY = (taskId: string) => `${TASK_KEY(taskId)}:claimed_su
   * @returns redis key
   */
 
+/**
+ * use with SADD, SREM
+ */
+const SOLVED_TASKS_KEY = "solved_tasks";
+
 //eslint-disable-next-line func-style
 const HEARTBEAT_KEY = (taskId: string, subtaskIndex: string) => `heartbeat:${taskId}:${subtaskIndex}`;
+
+//eslint-disable-next-line func-style
+const WORKER_DATA_KEY = (workerId: string) => `worker:${workerId}`;
 
 
 export interface Logger {
@@ -60,18 +68,14 @@ export interface Logger {
 }
 
 export const defaultLogger: Logger = {
-  log: (message) => console.log(message),
-  warn: (message) => console.warn(message),
-  error: (message) => console.error(message),
-  debug: (message) => console.debug(message),
+  log: (message) => console.log(new Date(), "LOG", message),
+  warn: (message) => console.log(new Date(), "WARN", message),
+  error: (message) => console.log(new Date(), "ERROR", message),
+  debug: (message) => console.log(new Date(), "DEBUG", message),
 };
 
 export async function addTask(req: CreateTaskRequest, client: RedisClientType, logger = defaultLogger): Promise<void> {
   const { name, subtaskRangeLen, wordlist, algo, passwordHash: password } = CreateTaskRequest.parse(req);
-  const task: Task = {
-    id: uuid(),
-    name: name,
-  };
   const subtasks: SubTask[] = [];
   logger.log(`Computing subtasks - ${subtaskRangeLen} wordlist lines per subtask`);
   for (
@@ -86,6 +90,13 @@ export async function addTask(req: CreateTaskRequest, client: RedisClientType, l
       wordlistLineRange: [i, i + subtaskRangeLen - 1],
     });
   }
+  const task: Task = {
+    id: uuid(),
+    name: name,
+    subtaskCount: subtasks.length,
+    answer: null,
+  };
+
   logger.log(`Computed ${subtasks.length} subtasks`);
   logger.log(`Adding subtasks to task ${task.id}`);
   for (const [index, subtask] of subtasks.entries()) {
@@ -110,6 +121,7 @@ export async function claimSubTask(req: ClaimSubTaskRequest, client: RedisClient
       logger.error(`Could not get task ${taskId}: not found`);
       return null;
     }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     task = JSON.parse(taskStr) as Task;
   } catch (error) {
     if (error instanceof Error) {
@@ -192,8 +204,8 @@ export async function heartbeat(beat: WorkerHeartbeat, client: RedisClientType, 
     };
   } else {
     await client.multi()
-      .sRem("claimed_tasks", taskId)
-      .lPush("tasks", taskId)
+      .sRem(CLAIMED_SUBTASKS_KEY(taskId), subTaskId)
+      .rPush(TASKS_KEY, taskId)
       .exec();
     logger.warn(`Heartbeat missed for task ${taskId}, belonging to worker ${workerId}, returning task to queue`);
     return { success: false };
@@ -202,8 +214,14 @@ export async function heartbeat(beat: WorkerHeartbeat, client: RedisClientType, 
 
 export async function getAllTasks(client: RedisClientType, logger = defaultLogger): Promise<Task[]> {
   const taskIds = await client.lRange(TASKS_KEY, 0, -1);
+  const solvedTaskIds = await client.sMembers(SOLVED_TASKS_KEY);
   const tasks = await Promise.all(taskIds.map((taskId) => getTask(taskId, client, logger)));
-  return tasks.filter((task): task is Task => task !== null);
+  const solvedTasks = await Promise.all(solvedTaskIds.map((taskId) => getTask(taskId, client, logger)));
+  const result = [
+    ...tasks.filter((task): task is Task => task !== null),
+    ...solvedTasks.filter((task): task is Task => task !== null),
+  ];
+  return result;
 }
 
 export async function getTask(taskId: string, client: RedisClientType, logger = defaultLogger): Promise<Task | null> {
@@ -216,6 +234,23 @@ export async function getTask(taskId: string, client: RedisClientType, logger = 
   return Task.parse(taskObj);
 }
 
+export async function registerWorker(client: RedisClientType, logger = defaultLogger): Promise<WorkerRegistration> {
+  const workerId = uuid();
+  const workerSecret = Array.from({ length: 32 }, () => Math.floor(Math.random() * 256).toString(16).padStart(2, "0")).join("");
+  logger.log(`Registering worker ${workerId}`);
+  await client.set(WORKER_DATA_KEY(workerId), workerSecret);
+  return WorkerRegistration.parse({
+    workerId,
+    workerSecret,
+  });
+}
+
+export async function issueWorkerToken() {}
+export async function verifyWorkerToken() {}
+
+// TODO other worker functions
+
+
 export async function getSubTask(taskId: string, subTaskId: string, client: RedisClientType, logger = defaultLogger): Promise<SubTask | null> {
   const subTaskKey = SUBTASK_KEY(taskId, subTaskId);
   const subTask = await client.get(subTaskKey);
@@ -223,30 +258,51 @@ export async function getSubTask(taskId: string, subTaskId: string, client: Redi
     return null;
   }
   logger.log(`Getting subtask ${subTaskId} from task ${taskId}`);
+  logger.log(subTask);
   const obj = JSON.parse(subTask);
+  logger.log(obj);
   logger.log(`Task is ${subTask}`);
   return SubTask.parse(obj);
 }
 
 
 //entirely wrong, need to get the subtask by retrieving the task and then getting the taskId
-export async function sendAnswer(answer: Answer, client: RedisClientType, logger = defaultLogger): Promise<Answer | null> {
-  const { subTaskId, answerId, description } = Answer.parse(answer);
-  const subTaskKey = SUBTASK_KEY(answerId, subTaskId);
+export async function sendAnswer(answer: Answer, client: RedisClientType, logger = defaultLogger): Promise<Task | null> {
+  const { taskId, subTaskId, answerString } = Answer.parse(answer);
+  const task = await getTask(taskId, client, logger);
+  if (!task) {
+    logger.error(`Could not find task ${taskId}`);
+    return null;
+  }
+  const subTaskKey = SUBTASK_KEY(taskId, String(subTaskId));
   const subTask = await client.get(subTaskKey);
   if (subTask === null) {
     return null;
   }
+  if (!answerString) {
+    logger.warn(`Answer for subtask ${subTaskId} is empty`);
+    await client.hDel(CLAIMED_SUBTASKS_KEY(taskId), subTaskId);
+    return null;
+  }
   logger.log(`Storing answer for subtask ${subTaskId}`);
-  const updatedSubTask = { ...JSON.parse(subTask), description };
-  await client.set(subTaskKey, JSON.stringify(updatedSubTask));
-  return updatedSubTask;
+  const updatedTask = { ...task, answer: answerString } satisfies Task;
+  await client.multi()
+    .set(TASK_KEY(taskId), JSON.stringify(updatedTask))
+    .sAdd(SOLVED_TASKS_KEY, taskId)
+    .hDel(CLAIMED_SUBTASKS_KEY(taskId), subTaskId)
+    // delete all subtasks
+    .lTrim(SUBTASKS_KEY(taskId), 0, 0)
+    .lRem(TASKS_KEY, 0, taskId)
+    .exec();
+  await Promise.all((await client.keys(SUBTASK_KEY(taskId, "*"))).map((key) => client.del(key)));
+  logger.log(`Stored answer for subtask ${subTaskId}`);
+  return updatedTask;
 }
 
 export async function getStats(client: RedisClientType, logger = defaultLogger): Promise<Stats> {
   logger.log("Getting stats");
   const totalTasks = await client.lLen(TASKS_KEY);
-  const [subtasksQueued, subtasksClaimed] = await client.eval(
+  const [subtasksQueued, subtasksClaimed, tasksSolved] = await client.eval(
     `
     local subtasksKeys = redis.call("KEYS", KEYS[1])
     local subtasksQueued = 0
@@ -260,16 +316,18 @@ export async function getStats(client: RedisClientType, logger = defaultLogger):
       local count = redis.call("HLEN", claimedSubtaskKey)
       subtasksClaimed = subtasksClaimed + count
     end
-    return { subtasksQueued, subtasksClaimed }
+    local tasksSolved = redis.call("SCARD", KEYS[3])
+    return { subtasksQueued, subtasksClaimed, tasksSolved }
   `, {
-      keys: [SUBTASKS_KEY("*"), CLAIMED_SUBTASKS_KEY("*")],
+      keys: [SUBTASKS_KEY("*"), CLAIMED_SUBTASKS_KEY("*"), SOLVED_TASKS_KEY],
     },
-  ) as [number, number] | undefined ?? [0, 0];
+  ) as [number, number, number] | undefined ?? [0, 0, 0];
   const totalSubTasks = subtasksQueued + subtasksClaimed;
   return Promise.resolve({
     totalTasks,
     totalSubTasks,
     subtasksQueued,
     subtasksClaimed,
+    tasksSolved,
   });
 }

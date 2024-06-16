@@ -58,7 +58,6 @@ export function apiController({ redisClient }: ApiControllerOptions): express.Ro
       .catch((e) => handleError(res, e));
   });
 
-  //still needs testing
   router.post("/task/answer", (req, res) => {
     const answer = req.body;
     sendAnswer(answer, redisClient)

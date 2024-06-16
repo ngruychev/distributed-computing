@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Stats | Distributed Computing</title>
   <script src="https://unpkg.com/petite-vue" defer init></script>
-  <link rel="stylesheet" href="http://mincss.com/entireframework.min.css" />
+  <link rel="stylesheet" href="https://mincss.com/entireframework.min.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -34,6 +34,8 @@
       <dd>{{ stats.subtasksClaimed }}</dd>
       <dt>Total subtasks</dt>
       <dd>{{ stats.totalSubTasks }}</dd>
+      <dt>Tasks solved</dt>
+      <dd>{{ stats.tasksSolved }}</dd>
     </dl>
   </main>
   <script>
@@ -45,6 +47,7 @@
           subtasksQueued: 0,
           subtasksClaimed: 0,
           totalSubTasks: 0,
+          tasksSolved: 0,
         },
         loading: false,
         error: false,
@@ -64,6 +67,7 @@
               this.stats.subtasksQueued = stats.subtasksQueued;
               this.stats.subtasksClaimed = stats.subtasksClaimed;
               this.stats.totalSubTasks = stats.totalSubTasks;
+              this.stats.tasksSolved = stats.tasksSolved;
             })
             .catch((err) => {
               this.loading = false;

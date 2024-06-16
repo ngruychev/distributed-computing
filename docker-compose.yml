@@ -2,6 +2,7 @@ version: "3.9"
 
 services:
   redis:
+    restart: "always"
     image: bitnami/valkey
     environment:
       - VALKEY_PASSWORD=password
@@ -15,6 +16,7 @@ services:
       timeout: 10s
       retries: 5
   backend:
+    restart: "always"
     build:
       dockerfile: ./Dockerfile
       target: app-backend
@@ -30,6 +32,7 @@ services:
       timeout: 10s
       retries: 5
   worker1:
+    restart: "always"
     build:
       dockerfile: ./Dockerfile
       target: app-worker
