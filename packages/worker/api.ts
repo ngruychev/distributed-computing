@@ -30,7 +30,7 @@ export async function heartbeat(server: string, {
   subTaskId,
   nonce,
 }: WorkerHeartbeat): Promise<WorkerHeartbeatResponse> {
-  return fetch(`${server}/api/heartbeat`, {
+  return fetch(`${server}/api/task/heartbeat`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -55,7 +55,7 @@ export async function heartbeat(server: string, {
     });
 }
 
-export async function getTaskInfo(server: string, taskId: string): Promise<Task> {
+export async function getTask(server: string, taskId: string): Promise<Task> {
   return fetch(`${server}/api/task/${taskId}`)
     .catch((err) => {
       console.error("error while getting task info", err);

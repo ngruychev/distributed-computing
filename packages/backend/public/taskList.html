@@ -31,6 +31,8 @@
         <tr>
           <th>Id</th>
           <th>Name</th>
+          <th>Answer</th>
+          <th>Progress</th>
         </tr>
       </thead>
       <tbody v-if="tasks.length > 0">
@@ -39,12 +41,41 @@
           <td>{{ task.name }}</td>
           <td v-if="task.answer !== null">{{ task.answer }}</td>
           <td v-if="!task.answer">❌</td>
+          <td v-scope="TaskInfo({ taskId: task.id })" @vue:mounted="load()">
+            <span v-if="loading">Loading</span>
+            <span v-if="error" title="Could not load info">⚠</span>
+            <span v-if="info">{{ info.subtaskCount - info.subtasksQueued }}/{{ info.subtaskCount }}</span>
+          </td>
         </tr>
       </tbody>
     </table>
   </main>
   <script>
     const API_URL = "/api";
+    function TaskInfo({ taskId }) {
+      return {
+        loading: false,
+        error: false,
+        info: null,
+        load() {
+          this.loading = true;
+          fetch(`${API_URL}/task/${taskId}/info`)
+            .then(async (resp) => {
+              this.loading = false;
+              if (!resp.ok) {
+                this.error = true;
+                this.info = null;
+                return;
+              }
+              this.info = await resp.json();
+            })
+            .catch(() => {
+              this.error = true;
+              this.info = null;
+            });
+        },
+      };
+    }
     function Stats() {
       return {
         tasks: [],

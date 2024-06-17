@@ -17,7 +17,7 @@ import { SubTask } from "@distributed-computing/types";
 
 const WORDLISTS = SubTask.shape.wordlist.options;
 const ALGOS = SubTask.shape.algo.options;
-const HEARTBEAT_UPDATE_INTERVAL = 5_000;
+const HEARTBEAT_UPDATE_INTERVAL = 1_500;
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -126,15 +126,10 @@ async function main() {
       if (!claimedSubtask.heartbeat.success) {
         throw new Error("failed to claim subtask", { cause: claimedSubtask });
       }
-      let lastHeartBeatNonce = claimedSubtask.heartbeat.nextHeartBeatNonce;
       //
       const intervalStatus = {
-        // promise: new Promise((resolve, reject) => {
-        //   intervalStatus.reject = reject;
-        //   intervalStatus.resolve = resolve;
-        // }),
         promise: null as Promise<unknown> | null,
-        reject: null as ((reason?: any) => void) | null,
+        reject: null as ((reason?: unknown) => void) | null,
         resolve: null as ((value?: unknown) => void) | null,
       };
       intervalStatus.promise = new Promise((resolve, reject) => {
@@ -144,19 +139,26 @@ async function main() {
       const interval = setInterval(async () => {
         try {
           if (Date.now() - lastHeartBeatTime > HEARTBEAT_UPDATE_INTERVAL) {
+            console.log(new Date(), "Doing heartbeat for ", task.id, "with nonce", (claimedSubtask?.heartbeat.success ? claimedSubtask.heartbeat.nextHeartBeatNonce : "(N/A)"));
             const res = await heartbeat(QUEUE_SERVER, {
               taskId: task.id,
               subTaskId: claimedSubtask!.subTaskId,
               workerId,
-              nonce: lastHeartBeatNonce,
+              nonce: (claimedSubtask?.heartbeat.success && claimedSubtask.heartbeat.nextHeartBeatNonce || ""),
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             }).catch((_err) => null);
             if (!res || res.success !== true) {
               clearInterval(interval);
               claimedSubtask = null;
               throw new Error("failed to send heartbeat", { cause: res });
             }
-            lastHeartBeatNonce = res.nextHeartBeatNonce;
-            lastHeartBeatTime = Date.now();
+            console.log(new Date(), "Heartbeat success", res.nextHeartBeatNonce);
+            if (claimedSubtask?.heartbeat.success) {
+              claimedSubtask!.heartbeat.success = true;
+              claimedSubtask.heartbeat.nextHeartBeatNonce = res.nextHeartBeatNonce;
+              lastHeartBeatTime = Date.now();
+              console.log(new Date(), "Set next heartbeat nonce to", claimedSubtask.heartbeat.nextHeartBeatNonce);
+            }
             intervalStatus.resolve?.();
           }
         } catch (error) {
@@ -178,10 +180,9 @@ async function main() {
       }
       try {
         await intervalStatus.promise;
-      } catch (error) {
+      } finally {
         clearInterval(interval);
         claimedSubtask = null;
-        throw error;
       }
       await sleep(HEARTBEAT_UPDATE_INTERVAL);
     } catch (error) {
