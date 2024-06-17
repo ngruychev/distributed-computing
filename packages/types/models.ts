@@ -43,6 +43,14 @@ export const Task = z.object({
 });
 export type Task = z.infer<typeof Task>;
 
+export const TaskInfo = z.object({
+  subtaskCount: z.number(),
+  subtasksClaimed: z.number(),
+  subtasksQueued: z.number(),
+  answer: z.string().min(1).or(z.null()),
+});
+export type TaskInfo = z.infer<typeof TaskInfo>;
+
 export const WorkerHeartbeat = z.object({
   taskId: z.string().uuid(),
   subTaskId: z.string(),

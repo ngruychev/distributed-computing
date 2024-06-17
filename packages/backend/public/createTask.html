@@ -84,6 +84,7 @@
         buttonText: "Submit",
         error: false,
         errorText: "",
+        success: false,
         submit() {
           this.buttonText = "Submitting...";
           this.loading = true;
@@ -114,9 +115,11 @@
                 return;
               }
               this.error = false;
+              this.success = true;
               this.errorText = "";
               this.submitting = false;
               this.buttonText = "Submit";
+              
             });
         },
       };

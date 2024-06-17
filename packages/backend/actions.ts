@@ -1,7 +1,8 @@
 import { WatchError, type RedisClientType } from "redis"; import { v4 as uuid } from "uuid";
-import { Stats, WorkerHeartbeatResponse, WorkerRegistration } from "@distributed-computing/types";
+import { Stats, WorkerHeartbeatResponse , Task } from "@distributed-computing/types";
+import { TaskInfo, WorkerRegistration } from "@distributed-computing/types";
 import { Answer } from "@distributed-computing/types";
-import { Task, WorkerHeartbeat, ClaimSubTaskRequest, ClaimedSubTask, CreateTaskRequest, SubTask } from "@distributed-computing/types";
+import { WorkerHeartbeat, ClaimSubTaskRequest, ClaimedSubTask, CreateTaskRequest, SubTask } from "@distributed-computing/types";
 
 const HEARTBEAT_EXPIRE_SECONDS = 120;
 
@@ -204,12 +205,26 @@ export async function heartbeat(beat: WorkerHeartbeat, client: RedisClientType, 
     };
   } else {
     await client.multi()
-      .sRem(CLAIMED_SUBTASKS_KEY(taskId), subTaskId)
+      .hDel(CLAIMED_SUBTASKS_KEY(taskId), subTaskId)
       .rPush(TASKS_KEY, taskId)
       .exec();
     logger.warn(`Heartbeat missed for task ${taskId}, belonging to worker ${workerId}, returning task to queue`);
     return { success: false };
   }
+}
+
+export async function cleanupExpiredHeartbeats(client: RedisClientType, logger = defaultLogger): Promise<void> {
+  // todo proofread
+  const taskKeys = await client.keys("heartbeat:*");
+  const heartbeats = await Promise.all(taskKeys.map((key) => client.get(key)));
+  const expired = heartbeats.filter((nonce) => nonce === null);
+  if (expired.length === 0) {
+    logger.log("No expired heartbeats found");
+    return;
+  }
+  logger.log(`Cleaning up ${expired.length} expired heartbeats`);
+  await Promise.all(expired.map((nonce) => client.del(nonce)));
+  logger.log("Cleaned up expired heartbeats");
 }
 
 export async function getAllTasks(client: RedisClientType, logger = defaultLogger): Promise<Task[]> {
@@ -225,13 +240,28 @@ export async function getAllTasks(client: RedisClientType, logger = defaultLogge
 }
 
 export async function getTask(taskId: string, client: RedisClientType, logger = defaultLogger): Promise<Task | null> {
-  const task = await client.get(TASK_KEY(taskId));
-  if (task === null) {
+  const taskStr = await client.get(TASK_KEY(taskId));
+  if (taskStr === null) {
     return null;
   }
   logger.log(`Getting task ${taskId}`);
-  const taskObj = JSON.parse(task);
-  return Task.parse(taskObj);
+  const task = Task.parse(JSON.parse(taskStr));
+  return task;
+}
+
+export async function getTaskInfo(taskId: string, client: RedisClientType, logger = defaultLogger): Promise<TaskInfo | null> {
+  const task = await getTask(taskId, client, logger);
+  if (!task) {
+    return null;
+  }
+  const subtasksClaimed = await client.hLen(CLAIMED_SUBTASKS_KEY(task.id));
+  const subtasksQueued = await client.lLen(SUBTASKS_KEY(task.id));
+  return TaskInfo.parse({
+    answer: task.answer,
+    subtaskCount: task.subtaskCount,
+    subtasksQueued,
+    subtasksClaimed,
+  } satisfies TaskInfo);
 }
 
 export async function registerWorker(client: RedisClientType, logger = defaultLogger): Promise<WorkerRegistration> {
@@ -266,7 +296,6 @@ export async function getSubTask(taskId: string, subTaskId: string, client: Redi
 }
 
 
-//entirely wrong, need to get the subtask by retrieving the task and then getting the taskId
 export async function sendAnswer(answer: Answer, client: RedisClientType, logger = defaultLogger): Promise<Task | null> {
   const { taskId, subTaskId, answerString } = Answer.parse(answer);
   const task = await getTask(taskId, client, logger);
@@ -289,12 +318,26 @@ export async function sendAnswer(answer: Answer, client: RedisClientType, logger
   await client.multi()
     .set(TASK_KEY(taskId), JSON.stringify(updatedTask))
     .sAdd(SOLVED_TASKS_KEY, taskId)
-    .hDel(CLAIMED_SUBTASKS_KEY(taskId), subTaskId)
+    // .hDel(CLAIMED_SUBTASKS_KEY(taskId), subTaskId)
+    .del(CLAIMED_SUBTASKS_KEY(taskId))
     // delete all subtasks
-    .lTrim(SUBTASKS_KEY(taskId), 0, 0)
+    // .lTrim(SUBTASKS_KEY(taskId), 0, 0)
+    .del(SUBTASKS_KEY(taskId))
     .lRem(TASKS_KEY, 0, taskId)
     .exec();
-  await Promise.all((await client.keys(SUBTASK_KEY(taskId, "*"))).map((key) => client.del(key)));
+  // await Promise.all((await client.keys(SUBTASK_KEY(taskId, "*"))).map((key) => client.del(key)));
+  // await client.del(CLAIMED_SUBTASKS_KEY(taskId));
+  await client.eval(
+    `
+      local subtaskKeys = KEYS[1]
+      local keys = redis.call("KEYS", subtaskKeys)
+      for _, key in ipairs(keys) do
+        redis.call("DEL", key)
+      end
+    `, { keys: [SUBTASK_KEY(taskId, "*")] });
+  logger.debug(`Deleting key ${CLAIMED_SUBTASKS_KEY(taskId)}`);
+  await client.keys(TASKS_KEY).then((keys) => logger.debug(`Task Keys: ${keys.join(", ")}`));
+  await client.keys(SUBTASKS_KEY(taskId)).then((keys) => logger.debug(`Sub Task Keys: ${keys.join(", ")}`));
   logger.log(`Stored answer for subtask ${subTaskId}`);
   return updatedTask;
 }
